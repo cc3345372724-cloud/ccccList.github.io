@@ -1,0 +1,927 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mind Bubbles Ultimate - Second Brain</title>
+    <style>
+        /* === 0. 核心变量与重置 === */
+        :root {
+            /* 视觉基调 */
+            --glass-bg: rgba(255, 255, 255, 0.08);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --glass-blur: 20px;
+            --text-main: rgba(255, 255, 255, 0.95);
+            --text-sub: rgba(255, 255, 255, 0.6);
+
+            /* 功能色 */
+            --accent-blue: #0A84FF; /* iOS Blue */
+            --accent-green: #30D158; /* iOS Green */
+            --accent-red: #FF453A;   /* iOS Red */
+            --card-bg: #1C1C1E;      /* iOS Dark Card */
+
+            /* 渐变色 (来自 Code 1) */
+            --primary-gradient: linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%);
+
+            /* 心情颜色 (来自 Code 2) */
+            --mood-red: #FF6B6B;
+            --mood-orange: #FFAA64;
+            --mood-yellow: #FFE66D;
+            --mood-green: #4ECDC4;
+            --mood-pink: #FF9A9E;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+            background-color: #000;
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* 防止 iOS 橡皮筋效果影响整体布局 */
+        }
+
+        /* === 1. 动态背景层 === */
+        .bg-layer { position: fixed; inset: 0; background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364); z-index: -2; }
+        .bg-image {
+            position: fixed; inset: 0; background-size: cover; background-position: center;
+            opacity: 0.4; z-index: -1; filter: blur(3px); transition: 0.5s;
+            /* 默认图 */
+            background-image: url('https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?q=80&w=2000&auto=format&fit=crop');
+        }
+
+        /* === 2. 顶部导航栏 (Code 2 Style) === */
+        .top-bar {
+            flex-shrink: 0;
+            padding: 12px 20px;
+            background: rgba(0,0,0,0.3); backdrop-filter: blur(15px);
+            border-bottom: 0.5px solid var(--glass-border);
+            z-index: 100;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .date-control { display: flex; align-items: center; gap: 15px; }
+        .date-title { font-size: 17px; font-weight: 600; }
+        .icon-btn {
+            background: none; border: none; color: var(--accent-blue); font-size: 18px;
+            cursor: pointer; padding: 5px; transition: transform 0.2s;
+        }
+        .icon-btn:hover { transform: scale(1.1); }
+        .top-actions { display: flex; gap: 15px; }
+
+        /* === 3. 日历条 === */
+        .calendar-strip-container {
+            flex-shrink: 0; padding: 10px 0;
+            background: rgba(255,255,255,0.02);
+        }
+        .calendar-strip {
+            display: flex; gap: 8px; padding: 0 15px; overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .calendar-strip::-webkit-scrollbar { display: none; }
+
+        .day-pill {
+            flex: 0 0 46px; height: 62px; border-radius: 14px; background: var(--glass-bg);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-size: 12px; border: 1px solid transparent; transition: 0.2s; position: relative;
+            cursor: pointer;
+        }
+        .day-pill span:first-child { font-size: 10px; opacity: 0.6; margin-bottom: 2px; }
+        .day-pill span:last-child { font-size: 16px; font-weight: 600; }
+
+        .day-pill.active { background: #fff; color: #000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .day-pill.has-data { border-color: var(--accent-green); }
+
+        /* 心情标记 */
+        .day-pill[data-mood="red"] { border-color: var(--mood-red); box-shadow: 0 0 8px rgba(255, 107, 107, 0.4); }
+        .day-pill[data-mood="orange"] { border-color: var(--mood-orange); box-shadow: 0 0 8px rgba(255, 170, 100, 0.4); }
+        .day-pill[data-mood="yellow"] { border-color: var(--mood-yellow); box-shadow: 0 0 8px rgba(255, 230, 109, 0.4); }
+        .day-pill[data-mood="green"] { border-color: var(--mood-green); box-shadow: 0 0 8px rgba(78, 205, 196, 0.4); }
+        .day-pill[data-mood="pink"] { border-color: var(--mood-pink); box-shadow: 0 0 8px rgba(255, 154, 158, 0.4); }
+
+        /* === 4. 待办事项区域 (Code 2 特色) === */
+        .todo-section {
+            flex-shrink: 0;
+            padding: 15px; margin: 10px 15px 5px;
+            background: rgba(40, 40, 40, 0.4); backdrop-filter: blur(25px);
+            border-radius: 18px; border: 1px solid rgba(255,255,255,0.1);
+            max-height: 160px; overflow-y: auto;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .todo-header {
+            font-size: 13px; color: var(--text-sub); display: flex; justify-content: space-between;
+            margin-bottom: 5px; position: sticky; top: 0; z-index: 10;
+        }
+        .todo-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 10px; background: rgba(255,255,255,0.05); border-radius: 10px;
+            transition: all 0.2s; animation: slideIn 0.3s;
+        }
+        .todo-checkbox {
+            width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--text-sub);
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            transition: 0.2s; flex-shrink: 0;
+        }
+        .todo-checkbox.checked {
+            background: var(--accent-green); border-color: var(--accent-green);
+            animation: bounceCheck 0.4s;
+        }
+        .todo-checkbox.checked::after { content: '✓'; color: #fff; font-size: 14px; font-weight: bold; }
+
+        .todo-text {
+            flex: 1; font-size: 14px; outline: none; background: transparent; border: none;
+            color: #fff; font-family: inherit;
+        }
+        .todo-text.done { text-decoration: line-through; color: var(--text-sub); }
+
+        .add-todo-btn {
+            text-align: center; padding: 8px; font-size: 18px; color: var(--text-sub);
+            cursor: pointer; border-radius: 8px; background: rgba(255,255,255,0.02);
+            transition: 0.2s;
+        }
+        .add-todo-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+
+        /* === 5. 主舞台 (气泡) === */
+        .main-stage {
+            flex: 1; overflow-y: auto; overflow-x: hidden;
+            padding: 20px; position: relative;
+            display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center; gap: 15px;
+        }
+        .bubble {
+            border-radius: 50%; width: 90px; height: 90px;
+            background: var(--glass-bg); backdrop-filter: blur(15px);
+            border: 1px solid rgba(255,255,255,0.2);
+            display: flex; align-items: center; justify-content: center;
+            text-align: center; padding: 10px; font-size: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); animation: popIn 0.5s;
+            cursor: pointer; position: relative;
+        }
+        .bubble:active { transform: scale(0.95); }
+        .bubble span { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+        .ai-tag {
+            position: absolute; top: 10px; right: 10px;
+            width: 8px; height: 8px; background: #92FE9D; border-radius: 50%;
+            box-shadow: 0 0 5px #92FE9D; display: none;
+        }
+        .bubble.has-ai .ai-tag { display: block; }
+
+        /* === 6. 底部 Dock === */
+        .bottom-dock {
+            flex-shrink: 0; padding: 15px;
+            background: rgba(20, 20, 20, 0.85); backdrop-filter: blur(30px);
+            border-top: 0.5px solid rgba(255,255,255,0.1);
+            display: flex; flex-direction: column; gap: 12px;
+            padding-bottom: max(15px, env(safe-area-inset-bottom)); /* 适配 iPhone 底部条 */
+        }
+        .dock-row {
+            display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px;
+            scrollbar-width: none;
+        }
+        .dock-row::-webkit-scrollbar { display: none; }
+
+        .dock-btn {
+            white-space: nowrap; padding: 8px 16px; border-radius: 20px;
+            background: rgba(255,255,255,0.1); border: 1px solid var(--glass-border);
+            color: var(--text-main); font-size: 13px; cursor: pointer;
+            display: flex; align-items: center; gap: 6px; transition: background 0.2s;
+        }
+        .dock-btn.highlight {
+            background: linear-gradient(135deg, rgba(10, 132, 255, 0.2), rgba(48, 209, 88, 0.2));
+            border-color: var(--accent-blue); color: #fff; font-weight: 500;
+        }
+
+        .input-row { display: flex; gap: 10px; }
+        #mainInput {
+            flex: 1; padding: 12px 20px; border-radius: 25px;
+            border: 1px solid var(--glass-border); background: rgba(255,255,255,0.05);
+            color: #fff; font-size: 16px; outline: none;
+        }
+        #sendBtn {
+            width: 44px; height: 44px; border-radius: 50%; border: none;
+            background: var(--primary-gradient); color: #fff; font-size: 20px;
+            cursor: pointer; display: flex; justify-content: center; align-items: center;
+        }
+
+        /* === 7. 模态框通用 === */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000;
+            display: none; align-items: center; justify-content: center; opacity: 0; transition: 0.3s;
+        }
+        .modal-overlay.active { display: flex; opacity: 1; }
+
+        .modal-card {
+            width: 90%; max-width: 500px; max-height: 85vh; overflow-y: auto;
+            background: var(--card-bg); border-radius: 24px; padding: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6); position: relative;
+            transform: scale(0.95); transition: 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .modal-overlay.active .modal-card { transform: scale(1); }
+
+        .modal-header {
+            font-size: 18px; font-weight: 700; margin-bottom: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .close-icon { font-size: 24px; color: var(--text-sub); cursor: pointer; padding: 5px; }
+
+        /* 表单控件 */
+        .form-group { margin-bottom: 15px; }
+        .form-label { display: block; font-size: 12px; color: var(--text-sub); margin-bottom: 6px; }
+        .form-input, .form-textarea {
+            width: 100%; padding: 12px; background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+            color: #fff; font-size: 15px; outline: none; font-family: inherit;
+        }
+        .form-textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+
+        .btn-primary {
+            width: 100%; padding: 14px; border-radius: 14px; border: none;
+            background: var(--accent-blue); color: #fff; font-weight: 600; font-size: 16px;
+            cursor: pointer; margin-top: 10px; transition: 0.2s;
+        }
+        .btn-secondary { background: rgba(255,255,255,0.1); color: var(--text-main); }
+        .btn-danger { background: rgba(255, 69, 58, 0.2); color: var(--accent-red); }
+
+        /* AI 内容框 */
+        .ai-content-box {
+            background: rgba(255,255,255,0.05); border-radius: 12px; padding: 15px;
+            font-size: 14px; line-height: 1.6; border-left: 3px solid var(--accent-green);
+            margin-top: 15px; display: none; white-space: pre-wrap;
+        }
+
+        /* 动画关键帧 */
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
+        @keyframes bounceCheck { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+        .loading-spin { display:inline-block; animation: spin 1s infinite linear; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* 特殊组件: 心情选择器 */
+        .mood-selector { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 20px; }
+        .mood-item {
+            width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; opacity: 0.5; transition: 0.2s; background: currentColor;
+        }
+        .mood-item.selected { opacity: 1; transform: scale(1.1); border-color: #fff; box-shadow: 0 0 10px currentColor; }
+
+        /* 特殊组件: 复习卡片 */
+        .review-card {
+            background: #2C2C2E; border-radius: 16px; padding: 30px 20px; min-height: 220px;
+            display: flex; flex-direction: column; justify-content: center; text-align: center;
+            margin-bottom: 20px; font-size: 18px; font-weight: 500;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 1px solid #3A3A3C; cursor: pointer;
+        }
+
+        /* 统计饼图 */
+        .stats-wrap { text-align: center; margin-bottom: 20px; }
+        .pie-chart {
+            width: 160px; height: 160px; border-radius: 50%; background: #333; margin: 0 auto 15px;
+            position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.2);
+        }
+        .legend-box { text-align: left; font-size: 12px; color: var(--text-sub); display: inline-block; }
+        .legend-item { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+        .dot { width: 8px; height: 8px; border-radius: 2px; }
+
+    </style>
+</head>
+<body>
+
+    <!-- 背景 -->
+    <div class="bg-layer"></div>
+    <div class="bg-image" id="bgImage"></div>
+
+    <!-- 顶部日历 -->
+    <div class="top-bar">
+        <div class="date-control">
+            <button class="icon-btn" onclick="changeMonth(-1)">❮</button>
+            <div class="date-title" id="monthLabel">2025年 11月</div>
+            <button class="icon-btn" onclick="changeMonth(1)">❯</button>
+        </div>
+        <div class="top-actions">
+            <button class="icon-btn" onclick="openModal('statsModal'); renderStats();" title="统计">📊</button>
+            <button class="icon-btn" onclick="openReviewModal()" title="复习">🧠</button>
+            <button class="icon-btn" onclick="openModal('settingsModal')" title="设置">⚙</button>
+        </div>
+    </div>
+
+    <!-- 日历条 -->
+    <div class="calendar-strip-container">
+        <div class="calendar-strip" id="calendarStrip"></div>
+    </div>
+
+    <!-- 待办事项 -->
+    <div class="todo-section">
+        <div class="todo-header">
+            <span>📝 今日待办</span>
+            <span id="todoCount">0/0</span>
+        </div>
+        <div id="todoList"></div>
+        <div class="add-todo-btn" onclick="addTodo()">+ 新建待办</div>
+    </div>
+
+    <!-- 主舞台 -->
+    <div class="main-stage" id="stage"></div>
+
+    <!-- 底部功能栏 -->
+    <div class="bottom-dock">
+        <div class="dock-row">
+            <button class="dock-btn" onclick="openDiaryModal()">
+                📖 今日日记 <span id="moodDot" style="display:none; width:8px; height:8px; border-radius:50%; margin-left:5px;"></span>
+            </button>
+            <button class="dock-btn highlight" onclick="triggerDailySummary()">
+                ✨ AI 今日整理
+            </button>
+            <button class="dock-btn" onclick="openModal('bgModal')">
+                🖼 换背景
+            </button>
+        </div>
+        <div class="input-row">
+            <input type="text" id="mainInput" placeholder="New idea..." autocomplete="off">
+            <button id="sendBtn" onclick="addBubble()">↑</button>
+        </div>
+    </div>
+
+    <!-- ================= 模态框区域 ================= -->
+
+    <!-- 1. 设置 -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-card">
+            <div class="modal-header"><span>🔧 API 设置</span><span class="close-icon" onclick="closeModal('settingsModal')">×</span></div>
+            <div class="form-group">
+                <label class="form-label">API URL</label>
+                <input type="text" id="cfgUrl" class="form-input" placeholder="https://api.openai.com/v1 ">
+            </div>
+            <div class="form-group">
+                <label class="form-label">API Key</label>
+                <input type="password" id="cfgKey" class="form-input" placeholder="sk-...">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Model</label>
+                <input type="text" id="cfgModel" class="form-input" placeholder="gpt-3.5-turbo">
+            </div>
+            <button class="btn-primary" onclick="saveConfig()">保存配置</button>
+        </div>
+    </div>
+
+    <!-- 2. 日记 & 心情 -->
+    <div class="modal-overlay" id="diaryModal">
+        <div class="modal-card">
+            <div class="modal-header"><span id="diaryTitle">今日日记</span><span class="close-icon" onclick="closeModal('diaryModal')">×</span></div>
+
+            <label class="form-label">今日心情</label>
+            <div class="mood-selector">
+                <div class="mood-item" style="color:var(--mood-red)" onclick="setMood('red')"></div>
+                <div class="mood-item" style="color:var(--mood-orange)" onclick="setMood('orange')"></div>
+                <div class="mood-item" style="color:var(--mood-yellow)" onclick="setMood('yellow')"></div>
+                <div class="mood-item" style="color:var(--mood-green)" onclick="setMood('green')"></div>
+                <div class="mood-item" style="color:var(--mood-pink)" onclick="setMood('pink')"></div>
+            </div>
+
+            <div id="aiSummaryRef" class="ai-content-box" style="margin-bottom:15px; border-left-color:var(--accent-blue);"></div>
+
+            <label class="form-label">日记内容</label>
+            <textarea id="diaryInput" class="form-textarea" placeholder="今天发生了什么..."></textarea>
+            <button class="btn-primary" onclick="saveDiary()">保存日记</button>
+        </div>
+    </div>
+
+    <!-- 3. 气泡详情 & 拓展 -->
+    <div class="modal-overlay" id="bubbleModal">
+        <div class="modal-card">
+            <div class="modal-header"><span>💭 灵感详情</span><span class="close-icon" onclick="closeModal('bubbleModal')">×</span></div>
+            <textarea id="bubbleDetail" class="form-textarea" placeholder="详细描述..."></textarea>
+
+            <div style="display:flex; gap:10px;">
+                <button class="btn-primary" onclick="saveBubble()">保存</button>
+                <button class="btn-primary btn-danger" onclick="deleteBubble()">删除</button>
+            </div>
+
+            <button class="btn-primary btn-secondary" onclick="triggerBubbleExpand()">🤖 AI 拓展</button>
+            <div id="bubbleAiResult" class="ai-content-box"></div>
+        </div>
+    </div>
+
+    <!-- 4. 复习模式 -->
+    <div class="modal-overlay" id="reviewModal">
+        <div class="modal-card">
+            <div class="modal-header"><span>🧠 知识复习</span><span class="close-icon" onclick="closeModal('reviewModal')">×</span></div>
+
+            <div id="reviewSetup">
+                <label class="form-label">起始日期 (默认7天前)</label>
+                <input type="date" id="reviewStartDate" class="form-input">
+                <button class="btn-primary" onclick="startReview()">开始抽卡</button>
+            </div>
+
+            <div id="reviewPlay" style="display:none;">
+                <div class="review-card" onclick="flipCard()">
+                    <div style="font-size:12px; color:var(--text-sub); margin-bottom:15px;" id="cardDate"></div>
+                    <div id="cardFront" style="font-size:18px;"></div>
+                    <div id="cardBack" style="display:none; margin-top:20px; padding-top:20px; border-top:1px solid #444; color:var(--accent-green); font-size:14px;"></div>
+                </div>
+                <button class="btn-primary" onclick="nextCard()">下一张</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. 统计 -->
+    <div class="modal-overlay" id="statsModal">
+        <div class="modal-card">
+            <div class="modal-header"><span>📊 全局统计</span><span class="close-icon" onclick="closeModal('statsModal')">×</span></div>
+            <div class="stats-wrap">
+                <div class="pie-chart" id="pieChart"></div>
+                <div class="legend-box" id="legendBox"></div>
+            </div>
+            <div id="statsList" style="max-height:200px; overflow-y:auto; font-size:13px; color:var(--text-sub);"></div>
+        </div>
+    </div>
+
+    <!-- 6. 背景设置 -->
+    <div class="modal-overlay" id="bgModal">
+        <div class="modal-card">
+            <div class="modal-header"><span>🖼 更换背景</span><span class="close-icon" onclick="closeModal('bgModal')">×</span></div>
+            <label class="form-label">图片链接</label>
+            <input type="text" id="bgUrlInput" class="form-input" placeholder="https://...">
+            <label class="form-label" style="margin-top:10px;">或上传本地图片</label>
+            <input type="file" id="bgFileInput" class="form-input" accept="image/*">
+
+            <button class="btn-primary" onclick="saveBg()">应用</button>
+            <button class="btn-primary btn-secondary" onclick="resetBg()">恢复默认</button>
+        </div>
+    </div>
+
+    <script>
+        /* === 核心逻辑 === */
+        const DB = {
+            config: {
+                url: localStorage.getItem('mb_url') || 'https://api.openai.com/v1',
+                key: localStorage.getItem('mb_key') || '',
+                model: localStorage.getItem('mb_model') || 'gpt-3.5-turbo',
+                bg: localStorage.getItem('mb_bg') || ''
+            },
+            bubbles: JSON.parse(localStorage.getItem('mb_bubbles') || '[]'),
+            todos: JSON.parse(localStorage.getItem('mb_todos') || '{}'),
+            diaries: JSON.parse(localStorage.getItem('mb_diaries') || '{}'),
+            stats: JSON.parse(localStorage.getItem('mb_stats') || '{"categories":{}}')
+        };
+
+        const STATE = {
+            viewDate: new Date(), // 当前视图日期对象
+            curDateStr: '',       // 当前视图日期字符串 'YYYY-MM-DD'
+            curBubbleId: null,
+            reviewQueue: [],
+            reviewIdx: 0
+        };
+
+        const UTILS = {
+            fmt: d => d.toISOString().split('T')[0],
+            randColor: () => ['#4ECDC4', '#FFE66D', '#FF6B6B', '#92FE9D'][Math.floor(Math.random()*4)]
+        };
+
+        // 初始化
+        window.onload = () => {
+            // 加载配置
+            document.getElementById('cfgUrl').value = DB.config.url;
+            document.getElementById('cfgKey').value = DB.config.key;
+            document.getElementById('cfgModel').value = DB.config.model;
+            if(DB.config.bg) document.getElementById('bgImage').style.backgroundImage = `url('${DB.config.bg}')`;
+
+            // 绑定背景上传
+            document.getElementById('bgFileInput').addEventListener('change', e => {
+                const f = e.target.files[0];
+                if(f) {
+                    const r = new FileReader();
+                    r.onload = ev => document.getElementById('bgUrlInput').value = ev.target.result;
+                    r.readAsDataURL(f);
+                }
+            });
+
+            // 绑定输入回车
+            document.getElementById('mainInput').addEventListener('keypress', e => e.key==='Enter' && addBubble());
+
+            updateDateState(new Date()); // 默认今天
+        };
+
+        function updateDateState(date) {
+            STATE.viewDate = date;
+            STATE.curDateStr = UTILS.fmt(date);
+            renderCalendar();
+            renderTodos();
+            renderStage();
+            updateDockState();
+        }
+
+        // === 1. 日历 ===
+        function changeMonth(delta) {
+            STATE.viewDate.setMonth(STATE.viewDate.getMonth() + delta);
+            updateDateState(STATE.viewDate);
+        }
+
+        function renderCalendar() {
+            const y = STATE.viewDate.getFullYear(), m = STATE.viewDate.getMonth();
+            document.getElementById('monthLabel').innerText = `${y}年 ${m+1}月`;
+
+            const strip = document.getElementById('calendarStrip');
+            strip.innerHTML = '';
+
+            const days = new Date(y, m+1, 0).getDate();
+            for(let i=1; i<=days; i++) {
+                const d = new Date(y, m, i);
+                const dStr = UTILS.fmt(d); // 注意时区问题，这里简化处理，实际项目建议用库
+                // 修正：JS Date直接生成会有时区偏差，改用字符串拼接构造本地日期
+                const localStr = `${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+
+                const hasBubble = DB.bubbles.some(b => b.date === localStr);
+                const diary = DB.diaries[localStr];
+
+                const el = document.createElement('div');
+                el.className = `day-pill ${localStr===STATE.curDateStr ? 'active' : ''} ${hasBubble ? 'has-data' : ''}`;
+                if(diary && diary.mood) el.setAttribute('data-mood', diary.mood);
+
+                el.innerHTML = `<span>${['日','一','二','三','四','五','六'][d.getDay()]}</span><span>${i}</span>`;
+                el.onclick = () => {
+                    STATE.viewDate = new Date(y, m, i);
+                    STATE.curDateStr = localStr;
+                    renderCalendar(); // 刷新选中态
+                    renderTodos();
+                    renderStage();
+                    updateDockState();
+                };
+                strip.appendChild(el);
+            }
+
+            // 自动滚动
+            setTimeout(() => {
+                const active = strip.querySelector('.active');
+                if(active) active.scrollIntoView({behavior:'smooth', inline:'center'});
+            }, 100);
+        }
+
+        // === 2. 待办事项 (修复版) ===
+        function renderTodos() {
+            const list = document.getElementById('todoList');
+            if(!DB.todos[STATE.curDateStr]) DB.todos[STATE.curDateStr] = []; // 懒初始化
+            const todos = DB.todos[STATE.curDateStr];
+
+            document.getElementById('todoCount').innerText = `${todos.filter(t=>t.done).length}/${todos.length}`;
+
+            list.innerHTML = '';
+            todos.forEach((t, idx) => {
+                const el = document.createElement('div');
+                el.className = 'todo-item';
+                el.innerHTML = `
+                    <div class="todo-checkbox ${t.done ? 'checked' : ''}"></div>
+                    <input class="todo-text ${t.done ? 'done' : ''}" value="${t.text}" placeholder="写点什么...">
+                `;
+
+                // 绑定事件：勾选
+                el.querySelector('.todo-checkbox').onclick = () => toggleTodo(idx);
+                // 绑定事件：输入修改
+                const input = el.querySelector('input');
+                input.onchange = (e) => { t.text = e.target.value; saveAll(); };
+
+                list.appendChild(el);
+            });
+        }
+
+        function addTodo() {
+            DB.todos[STATE.curDateStr].push({ text: '', done: false });
+            saveAll();
+            renderTodos();
+        }
+
+        function toggleTodo(idx) {
+            const t = DB.todos[STATE.curDateStr][idx];
+            t.done = !t.done;
+            // 自动完成：写入日记气泡
+            if(t.done && t.text) {
+                DB.bubbles.push({
+                    id: Date.now(), date: STATE.curDateStr,
+                    text: `✅ 完成: ${t.text}`, ai: '', color: '#30D158'
+                });
+                renderStage();
+            }
+            saveAll();
+            renderTodos(); // 重新渲染更新视图
+        }
+
+        // === 3. 气泡 ===
+        function renderStage() {
+            const stage = document.getElementById('stage');
+            stage.innerHTML = '';
+            const list = DB.bubbles.filter(b => b.date === STATE.curDateStr);
+
+            list.forEach(b => {
+                const el = document.createElement('div');
+                el.className = `bubble ${b.ai ? 'has-ai' : ''}`;
+                el.style.borderColor = b.color || 'rgba(255,255,255,0.2)';
+                el.innerHTML = `<div class="ai-tag"></div><span>${b.text}</span>`;
+                el.onclick = () => openBubbleDetail(b.id);
+                stage.appendChild(el);
+            });
+        }
+
+        function addBubble() {
+            const input = document.getElementById('mainInput');
+            const val = input.value.trim();
+            if(!val) return;
+
+            // 强制添加至“今天”还是“当前视图”？逻辑：跟随当前视图
+            DB.bubbles.push({
+                id: Date.now(), date: STATE.curDateStr,
+                text: val, detail: '', ai: '', color: UTILS.randColor()
+            });
+            input.value = '';
+            saveAll();
+            renderStage();
+            renderCalendar(); // 更新小点
+
+            // 滚动
+            setTimeout(() => document.querySelector('.main-stage').scrollTop = 99999, 100);
+        }
+
+        // === 4. 详情 & AI ===
+        function openBubbleDetail(id) {
+            STATE.curBubbleId = id;
+            const b = DB.bubbles.find(i => i.id === id);
+            document.getElementById('bubbleDetail').value = b.detail || b.text;
+            const res = document.getElementById('bubbleAiResult');
+            res.innerHTML = b.ai || '';
+            res.style.display = b.ai ? 'block' : 'none';
+            openModal('bubbleModal');
+        }
+
+        function saveBubble() {
+            const b = DB.bubbles.find(i => i.id === STATE.curBubbleId);
+            b.detail = document.getElementById('bubbleDetail').value;
+            saveAll();
+            closeModal('bubbleModal');
+        }
+
+        function deleteBubble() {
+            if(!confirm('确定删除?')) return;
+            DB.bubbles = DB.bubbles.filter(i => i.id !== STATE.curBubbleId);
+            saveAll();
+            renderStage();
+            closeModal('bubbleModal');
+        }
+
+        async function triggerBubbleExpand() {
+            const b = DB.bubbles.find(i => i.id === STATE.curBubbleId);
+            const box = document.getElementById('bubbleAiResult');
+            box.style.display = 'block';
+            box.innerHTML = '<span class="loading-spin">⏳</span> 思考中...';
+
+            const prompt = `请对该想法/知识点进行深度拓展、发散思维或补充背景(500-2000字)：\n${b.detail || b.text}`;
+            const res = await callAI(prompt);
+
+            if(res) {
+                b.ai = res;
+                box.innerText = res;
+                saveAll();
+                renderStage(); // 更新绿点
+            } else {
+                box.innerText = 'API 调用失败';
+            }
+        }
+
+        // === 5. 日记 & 整理 ===
+        function openDiaryModal() {
+            const d = DB.diaries[STATE.curDateStr] || { content: '', mood: '' };
+            document.getElementById('diaryTitle').innerText = `${STATE.curDateStr} 日记`;
+            document.getElementById('diaryInput').value = d.content || '';
+
+            // 心情
+            document.querySelectorAll('.mood-item').forEach(el => el.classList.remove('selected'));
+            if(d.mood) document.querySelector(`.mood-item[onclick="setMood('${d.mood}')"]`).classList.add('selected');
+
+            // AI 摘要引用
+            const aiBox = document.getElementById('aiSummaryRef');
+            if(d.aiSummary) {
+                aiBox.style.display = 'block';
+                aiBox.innerText = "✨ AI 整理: " + d.aiSummary;
+            } else {
+                aiBox.style.display = 'none';
+            }
+
+            openModal('diaryModal');
+        }
+
+        function setMood(m) {
+            if(!DB.diaries[STATE.curDateStr]) DB.diaries[STATE.curDateStr] = {};
+            DB.diaries[STATE.curDateStr].mood = m;
+            document.querySelectorAll('.mood-item').forEach(el => el.classList.remove('selected'));
+            document.querySelector(`.mood-item[onclick="setMood('${m}')"]`).classList.add('selected');
+            saveAll();
+            renderCalendar(); // 更新日历心情圈
+            updateDockState();
+        }
+
+        function saveDiary() {
+            if(!DB.diaries[STATE.curDateStr]) DB.diaries[STATE.curDateStr] = {};
+            DB.diaries[STATE.curDateStr].content = document.getElementById('diaryInput').value;
+            saveAll();
+            closeModal('diaryModal');
+            renderCalendar();
+        }
+
+        async function triggerDailySummary() {
+            const list = DB.bubbles.filter(b => b.date === STATE.curDateStr);
+            if(list.length === 0) return alert('今天还没有气泡哦');
+
+            const btn = document.querySelector('.dock-btn.highlight');
+            const oldTxt = btn.innerText;
+            btn.innerText = '⏳ 分析中...';
+
+            const txt = list.map(b => `- ${b.text}`).join('\n');
+            const prompt = `
+                请根据以下今日碎片想法，生成JSON：
+                {"summary": "今日一句话总结", "categories": [{"name":"类别名","count":数字}]}
+
+                内容：
+                ${txt}
+            `;
+
+            const res = await callAI(prompt);
+            btn.innerText = oldTxt;
+
+            if(res) {
+                try {
+                    const json = JSON.parse(res.match(/\{[\s\S]*\}/)[0]);
+
+                    // 存日记
+                    if(!DB.diaries[STATE.curDateStr]) DB.diaries[STATE.curDateStr] = {};
+                    DB.diaries[STATE.curDateStr].aiSummary = json.summary;
+
+                    // 存统计
+                    json.categories.forEach(c => {
+                        DB.stats.categories[c.name] = (DB.stats.categories[c.name] || 0) + c.count;
+                    });
+
+                    saveAll();
+                    openDiaryModal(); // 打开日记展示结果
+                } catch(e) {
+                    alert('AI 返回格式错误，请重试');
+                }
+            }
+        }
+
+        function updateDockState() {
+            const d = DB.diaries[STATE.curDateStr];
+            const dot = document.getElementById('moodDot');
+            if(d && d.mood) {
+                dot.style.display = 'inline-block';
+                dot.style.backgroundColor = `var(--mood-${d.mood})`;
+            } else {
+                dot.style.display = 'none';
+            }
+        }
+
+        // === 6. 复习 ===
+        function openReviewModal() {
+            document.getElementById('reviewSetup').style.display = 'block';
+            document.getElementById('reviewPlay').style.display = 'none';
+            openModal('reviewModal');
+        }
+
+        function startReview() {
+            const dateInput = document.getElementById('reviewStartDate').value;
+            // 默认7天前
+            const startDate = dateInput ? new Date(dateInput) : new Date(Date.now() - 7*24*60*60*1000);
+
+            const pool = DB.bubbles.filter(b => new Date(b.date) >= startDate);
+            if(pool.length === 0) return alert('该时间段无数据');
+
+            STATE.reviewQueue = pool.sort(() => Math.random() - 0.5);
+            STATE.reviewIdx = 0;
+
+            document.getElementById('reviewSetup').style.display = 'none';
+            document.getElementById('reviewPlay').style.display = 'block';
+            showCard();
+        }
+
+        function showCard() {
+            if(STATE.reviewIdx >= STATE.reviewQueue.length) {
+                alert('复习完成！');
+                return closeModal('reviewModal');
+            }
+            const item = STATE.reviewQueue[STATE.reviewIdx];
+            document.getElementById('cardDate').innerText = item.date;
+            document.getElementById('cardFront').innerText = item.text;
+            document.getElementById('cardBack').style.display = 'none';
+            document.getElementById('cardBack').innerText = item.ai || '(无 AI 拓展)';
+        }
+
+        function flipCard() {
+            const back = document.getElementById('cardBack');
+            back.style.display = back.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function nextCard() {
+            STATE.reviewIdx++;
+            showCard();
+        }
+
+        // === 7. 统计 ===
+        function renderStats() {
+            const cats = DB.stats.categories || {};
+            const total = Object.values(cats).reduce((a,b)=>a+b, 0);
+            const chart = document.getElementById('pieChart');
+            const legend = document.getElementById('legendBox');
+
+            if(total === 0) {
+                chart.style.background = '#333';
+                legend.innerHTML = '暂无数据';
+                return;
+            }
+
+            let deg = 0;
+            const colors = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#FF9A9E', '#92FE9D', '#A8D8EA'];
+            let gradStr = [];
+            let legHtml = '';
+
+            Object.entries(cats).forEach(([name, count], idx) => {
+                const color = colors[idx % colors.length];
+                const endDeg = deg + (count/total)*360;
+                gradStr.push(`${color} ${deg}deg ${endDeg}deg`);
+                deg = endDeg;
+
+                legHtml += `
+                    <div class="legend-item">
+                        <div class="dot" style="background:${color}"></div>
+                        <span>${name}: ${count}</span>
+                    </div>`;
+            });
+
+            chart.style.background = `conic-gradient(${gradStr.join(', ')})`;
+            legend.innerHTML = legHtml;
+
+            // 列表
+            document.getElementById('statsList').innerHTML =
+                `<div>总灵感: ${DB.bubbles.length}</div><div>总待办: ${Object.values(DB.todos).flat().length}</div>`;
+        }
+
+        // === 通用 ===
+        function openModal(id) { document.getElementById(id).classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        function saveConfig() {
+            DB.config.url = document.getElementById('cfgUrl').value;
+            DB.config.key = document.getElementById('cfgKey').value;
+            DB.config.model = document.getElementById('cfgModel').value;
+            localStorage.setItem('mb_url', DB.config.url);
+            localStorage.setItem('mb_key', DB.config.key);
+            localStorage.setItem('mb_model', DB.config.model);
+            closeModal('settingsModal');
+        }
+
+        function saveBg() {
+            const url = document.getElementById('bgUrlInput').value;
+            if(url) {
+                DB.config.bg = url;
+                localStorage.setItem('mb_bg', url);
+                document.getElementById('bgImage').style.backgroundImage = `url('${url}')`;
+            }
+            closeModal('bgModal');
+        }
+
+        function resetBg() {
+            DB.config.bg = '';
+            localStorage.setItem('mb_bg', '');
+            document.getElementById('bgImage').style.backgroundImage = "url('https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?q=80&w=2000&auto=format&fit=crop')";
+            closeModal('bgModal');
+        }
+
+        function saveAll() {
+            localStorage.setItem('mb_bubbles', JSON.stringify(DB.bubbles));
+            localStorage.setItem('mb_todos', JSON.stringify(DB.todos));
+            localStorage.setItem('mb_diaries', JSON.stringify(DB.diaries));
+            localStorage.setItem('mb_stats', JSON.stringify(DB.stats));
+        }
+
+        async function callAI(prompt) {
+            if(!DB.config.key) { alert('请先设置 API Key'); return null; }
+            try {
+                const res = await fetch(`${DB.config.url}/chat/completions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${DB.config.key}` },
+                    body: JSON.stringify({
+                        model: DB.config.model,
+                        messages: [{role: 'user', content: prompt}],
+                        temperature: 0.7
+                    })
+                });
+                const data = await res.json();
+                return data.choices[0].message.content;
+            } catch(e) {
+                console.error(e);
+                alert('API Error');
+                return null;
+            }
+        }
+    </script>
+</body>
+</html>
+```
